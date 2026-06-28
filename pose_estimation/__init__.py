@@ -5,6 +5,7 @@ Pose estimation module containing functions for processing videos and calculatin
 from .processor import (
     calculate_joint_angle,
     process_video,
+    get_device,
     KEYPOINT_MAPPING,
     SKELETON_CONNECTION
 )
@@ -12,6 +13,7 @@ from .processor import (
 __all__ = [
     'calculate_joint_angle',
     'process_video',
+    'get_device',
     'KEYPOINT_MAPPING',
     'SKELETON_CONNECTION'
 ]

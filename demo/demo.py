@@ -10,7 +10,7 @@ import sys
 # Add parent directory to path to import skeleton module
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pose_estimation import process_video, KEYPOINT_MAPPING
+from pose_estimation import process_video, KEYPOINT_MAPPING, get_device
 from ultralytics import YOLO
 import cv2
 import pandas as pd
@@ -25,6 +25,11 @@ Upload a video to analyze human poses, joint angles, and angular velocities.
 The application detects poses in the video, calculates knee joint angles and their 
 angular velocities, and displays the results in an interactive dashboard.
 """)
+
+# Display device information
+device = get_device()
+device_color = "🟢" if device == "cuda" else "🔵"
+st.info(f"{device_color} **Processing Device**: {device.upper()}")
 
 # Display keypoint information
 with st.expander("📋 YOLO Keypoint Mapping (YOLOv8 Pose)"):
@@ -42,8 +47,10 @@ if 'video_path' not in st.session_state:
 if 'processed' not in st.session_state:
     st.session_state['processed'] = False
 if 'model' not in st.session_state:
-    with st.spinner("Loading YOLO model..."):
+    device = get_device()
+    with st.spinner(f"Loading YOLO model on {device.upper()}..."):
         st.session_state['model'] = YOLO('yolov8n-pose.pt')
+        st.session_state['device'] = device
 
 # File uploader
 uploaded_file = st.file_uploader("Choose a video file", type=['mp4', 'mov', 'avi', 'mkv'])

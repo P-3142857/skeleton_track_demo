@@ -7,6 +7,19 @@ import pandas as pd
 import cv2
 from scipy.signal import savgol_filter
 from tqdm import tqdm
+import torch
+
+
+def get_device():
+    """Determine the best device to use (CUDA or CPU).
+    
+    Returns:
+        str: 'cuda' if available, otherwise 'cpu'
+    """
+    if torch.cuda.is_available():
+        return 'cuda'
+    else:
+        return 'cpu'
 
 
 def calculate_joint_angle(p_top, p_joint, p_bottom):
@@ -78,12 +91,15 @@ def process_video(video_path, model, skeleton_connection=None, window_size=7, po
     person_data_history = {}
     current_frame_idx = 0
 
+    # Get the best device (CUDA or CPU)
+    device = get_device()
+
     for _ in tqdm(range(total_frames), desc="Processing video"):
         ret, frame = cap.read()
         if not ret:
             break
 
-        results = model.track(frame, persist=True, verbose=False, device='0', tracker='bytetrack.yaml')
+        results = model.track(frame, persist=True, verbose=False, device=device, tracker='bytetrack.yaml')
 
         if results and results[0].boxes is not None and results[0].boxes.id is not None:
             track_ids = results[0].boxes.id.cpu().numpy().astype(int)

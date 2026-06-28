@@ -14,20 +14,21 @@ import numpy as np
 import tempfile
 import sys
 import pandas as pd
-import ffmpeg
-# Add parent directory to path to import skeleton module
+
+# Add parent directory to path to import skeleton module if needed
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Import our updated process pipeline
 from pose_estimation import process_video, KEYPOINT_MAPPING, SKELETON_CONNECTION, get_device
 
 # Page configuration
-st.set_page_config(layout='wide', page_title='Pose Estimation and Kinematic Analysis')
+st.set_page_config(layout='wide', page_title='Pose Estimation and Advanced Kinematic Analysis')
 
-st.title('Video Pose Estimation and Kinematic Analysis')
+st.title('Video Pose Estimation and Advanced Kinematic Analysis')
 st.write("""
-Upload a video to analyze human poses, joint angles, and angular velocities for both arms and legs.
-The application tracks skeletal positions, calculates smoothed knee and elbow angles, and maps their
-velocities into an interactive real-time visual coaching dashboard.
+Upload a video to analyze comprehensive multi-joint human analytics. 
+The system detects full-body poses, tracks unique subjects, and embeds real-time angles 
+and smoothed velocities directly into your video streams and downloadable reports.
 """)
 
 # Display device information
@@ -36,13 +37,13 @@ device_color = "🟢" if device == "cuda" else "🔵"
 st.info(f"{device_color} **Processing Device**: {device.upper()}")
 
 # Display keypoint information
-with st.expander("📋 YOLO Keypoint Mapping & Tracked Joints"):
+with st.expander("📋 Tracked Joints & Biomechanical Definitions"):
     st.write("""
-The application uses the 17 standard COCO keypoints from the YOLO pose architecture. For joint analytics, the following chains are extracted:
-- **Left Arm**: Shoulder (5) → Elbow (7) → Wrist (9)
-- **Right Arm**: Shoulder (6) → Elbow (8) → Wrist (10)
-- **Left Leg**: Hip (11) → Knee (13) → Ankle (15)
-- **Right Leg**: Hip (12) → Knee (14) → Ankle (16)
+The application monitors full skeletal kinematics from the standard 17 COCO keypoints:
+- **Knee Angle**: Hip → Knee → Ankle
+- **Elbow Angle**: Shoulder → Elbow → Wrist
+- **Shoulder Angle**: Hip → Shoulder → Elbow *(New)*
+- **Thigh Angle**: Cross-Hip → Active Hip → Knee *(New)*
     """)
     keypoint_df = pd.DataFrame([
         {"Index": k, "Body Part": v} for k, v in sorted(KEYPOINT_MAPPING.items())
@@ -60,15 +61,14 @@ if 'model' not in st.session_state:
         st.session_state['model'] = YOLO('yolov8n-pose.pt')
         st.session_state['device'] = device
 
-# Helper function to convert frames into a web-compatible MP4 file
+# Web-optimized browser compilation function
 def save_frames_to_mp4(frames, fps=30):
     if not frames:
         return None
     
     height, width, _ = frames[0].shape
     
-    # 1. Save an intermediate raw video file using standard 'mp4v' 
-    # (This works natively without needing openh264-1.8.0-win64.dll)
+    # 1. Save an intermediate raw file using OpenCV's native mp4v
     raw_tmp = tempfile.NamedTemporaryFile(delete=False, suffix='_raw.mp4')
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out = cv2.VideoWriter(raw_tmp.name, fourcc, fps, (width, height))
@@ -77,11 +77,10 @@ def save_frames_to_mp4(frames, fps=30):
         out.write(frame)
     out.release()
     
-    # 2. Define the web-optimized output path for Streamlit
+    # 2. Re-encode to H.264 using FFmpeg so web browsers can display it natively
     web_tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
-    
     try:
-        # Re-encode the video stream using FFmpeg to standard H.264 (libx264)
+        import ffmpeg
         (
             ffmpeg
             .input(raw_tmp.name)
@@ -89,24 +88,19 @@ def save_frames_to_mp4(frames, fps=30):
             .overwrite_output()
             .run()
         )
-        # Clean up the raw temporary file
         try:
             os.remove(raw_tmp.name)
         except:
             pass
-            
         return web_tmp.name
-        
     except Exception as e:
-        # Fallback warning if system-level FFmpeg isn't discovered in the Windows path
-        st.warning("⚠️ Web-optimization failed because FFmpeg isn't installed or configured in your system path. Showing raw fallback.")
+        # Fallback to raw path if system-level ffmpeg wrapper errors out
         return raw_tmp.name
 
 # File uploader
 uploaded_file = st.file_uploader("Choose a video file", type=['mp4', 'mov', 'avi', 'mkv'])
 
 if uploaded_file is not None:
-    # Save the uploaded file temporarily
     with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1]) as tmp_file:
         tmp_file.write(uploaded_file.getvalue())
         video_path = tmp_file.name
@@ -119,25 +113,21 @@ if uploaded_file is not None:
         st.session_state['processed'] = False
         
         try:
-            with st.spinner("Processing video... This tracks full skeletal kinematics (arms & legs)."):
-                # Get native FPS from original video to match speeds
+            with st.spinner("Analyzing biomechanical vectors, smoothing velocities, and rendering dashboard box..."):
                 orig_cap = cv2.VideoCapture(video_path)
                 fps = orig_cap.get(cv2.CAP_PROP_FPS) or 30
                 orig_cap.release()
                 
-                # Process the video (includes knees and newly added elbows)
+                # Execute full processing pipeline
                 processed_frames, joint_data_df = process_video(
                     video_path,
                     st.session_state['model'],
                     Skeleton_connection=SKELETON_CONNECTION,
                     WINDOW_SIZE=7,
-                    POLY_ORDER=3,
-                    L_HIP=11, L_KNEE=13, L_ANKLE=15,
-                    R_HIP=12, R_KNEE=14, R_ANKLE=16
+                    POLY_ORDER=3
                 )
                 
-                # Compile frames into a video file Streamlit can play
-                st.text("Compiling processed frames into video player file...")
+                st.text("Compiling processed frames into web-optimized media files...")
                 output_video_path = save_frames_to_mp4(processed_frames, fps=fps)
                 
                 st.session_state['processed_frames'] = processed_frames
@@ -148,177 +138,82 @@ if uploaded_file is not None:
             st.success("✅ Video processed successfully!")
         
         except Exception as e:
-            st.error(f"❌ Error processing video: {str(e)}")
+            st.error(f"❌ Error during execution: {str(e)}")
             st.session_state['processed'] = False
     
-    # Display results if processing is complete
+    # Display results layout if processing is successful
     if st.session_state['processed']:
         st.divider()
         
-        tab1, tab2, tab3, tab4 = st.tabs(["🎥 Processed Video", "📊 Joint Data", "📈 Analytics", "ℹ️ Video Info"])
+        tab1, tab2, tab3, tab4 = st.tabs(["🎥 Video Stream & Live Data", "📊 Data Sheets", "📈 Kinematic Charts", "ℹ️ Run Summary"])
         
         with tab1:
-            st.subheader("Visual Overlay Playback & Kinematic Analysis")
-            
+            st.subheader("Visual Overlay Playback")
+            st.caption("Notice: Bounding boxes, skeletons, and the liveTelemetry block are baked directly into the video pixels.")
             if 'output_video_path' in st.session_state and st.session_state['output_video_path']:
-                # Create a side-by-side layout (65% width for video, 35% for the sticky data card box)
-                video_col, analysis_col = st.columns([65, 35])
+                st.video(st.session_state['output_video_path'])
                 
-                with video_col:
-                    # 1. Render the Video Player
-                    st.video(st.session_state['output_video_path'])
-                    
-                    # Video download capability
-                    with open(st.session_state['output_video_path'], 'rb') as f:
-                        st.download_button(
-                            label="📥 Download Processed Video (MP4)",
-                            data=f,
-                            file_name="processed_skeleton_pose.mp4",
-                            mime="video/mp4"
-                        )
-                
-                with analysis_col:
-                    # 2. Sticky/Sidebar Movement Analysis Box
-                    st.markdown("### 📊 Live Movement Metrics")
-                    
-                    df_metrics = st.session_state['joint_data_df']
-                    
-                    # Create a scrollable/bounded container box using custom CSS styling
-                    with st.container(border=True):
-                        st.write("✨ **Kinematic Extremes Detected**")
-                        
-                        # Gather maximum extension thresholds
-                        max_l_knee = df_metrics['left_knee_angle'].max()
-                        max_r_knee = df_metrics['right_knee_angle'].max()
-                        max_l_elbow = df_metrics['left_elbow_angle'].max()
-                        max_r_elbow = df_metrics['right_elbow_angle'].max()
-                        
-                        # Gather peak velocities
-                        peak_l_knee_vel = df_metrics['left_knee_angular_velocity'].abs().max()
-                        peak_r_knee_vel = df_metrics['right_knee_angular_velocity'].abs().max()
-                        peak_l_elbow_vel = df_metrics['left_elbow_angular_velocity'].abs().max()
-                        peak_r_elbow_vel = df_metrics['right_elbow_angular_velocity'].abs().max()
-
-                        # Metrics grids
-                        st.markdown("**🦵 Lower Body Limits**")
-                        c1, c2 = st.columns(2)
-                        c1.metric("Max L-Knee", f"{max_l_knee:.1f}°" if not np.isnan(max_l_knee) else "N/A")
-                        c2.metric("Max R-Knee", f"{max_r_knee:.1f}°" if not np.isnan(max_r_knee) else "N/A")
-                        
-                        c1_v, c2_v = st.columns(2)
-                        c1_v.metric("Peak L-Knee Vel", f"{peak_l_knee_vel:.1f}°/s" if not np.isnan(peak_l_knee_vel) else "N/A")
-                        c2_v.metric("Peak R-Knee Vel", f"{peak_r_knee_vel:.1f}°/s" if not np.isnan(peak_r_knee_vel) else "N/A")
-                        
-                        st.markdown("---")
-                        st.markdown("**💪 Upper Body Limits**")
-                        c3, c4 = st.columns(2)
-                        c3.metric("Max L-Elbow", f"{max_l_elbow:.1f}°" if not np.isnan(max_l_elbow) else "N/A")
-                        c4.metric("Max R-Elbow", f"{max_r_elbow:.1f}°" if not np.isnan(max_r_elbow) else "N/A")
-                        
-                        c3_v, c4_v = st.columns(2)
-                        c3_v.metric("Peak L-Elbow Vel", f"{peak_l_elbow_vel:.1f}°/s" if not np.isnan(peak_l_elbow_vel) else "N/A")
-                        c4_v.metric("Peak R-Elbow Vel", f"{peak_r_elbow_vel:.1f}°/s" if not np.isnan(peak_r_elbow_vel) else "N/A")
-
-                    # Add a secondary live feed summary log inside the box
-                    st.markdown("📝 **Summary Log Matrix**")
-                    summary_df = df_metrics[['timestamp', 'track_id', 'left_knee_angle', 'right_knee_angle', 'left_elbow_angle', 'right_elbow_angle']].copy()
-                    # Round for display cleanliness
-                    summary_df = summary_df.round(1)
-                    # Sample every few rows so it doesn't over-clutter the viewer viewport
-                    st.dataframe(summary_df.iloc[::5], use_container_width=True, height=220, hide_index=True)
+                with open(st.session_state['output_video_path'], 'rb') as f:
+                    st.download_button(
+                        label="📥 Download Telemetry Video File (MP4)",
+                        data=f,
+                        file_name="kinematics_telemetry_output.mp4",
+                        mime="video/mp4"
+                    )
             else:
-                st.warning("Video playback file could not be generated.")
+                st.warning("Web compilation error. Fall back to alternative player configurations.")
         
         with tab2:
-            st.subheader("Joint Position Data (Angles & Angular Velocities)")
-            st.dataframe(
-                st.session_state['joint_data_df'],
-                use_container_width=True,
-                height=400
-            )
+            st.subheader("Comprehensive Kinematic Dataset")
+            st.dataframe(st.session_state['joint_data_df'], use_container_width=True, height=400)
             
-            # Download button for CSV
             csv = st.session_state['joint_data_df'].to_csv(index=False)
             st.download_button(
-                label="📥 Download Joint Data (CSV)",
+                label="📥 Download Dataset Report (CSV)",
                 data=csv,
-                file_name="full_kinematic_data.csv",
+                file_name="full_body_kinematics.csv",
                 mime="text/csv"
             )
-        
+            
         with tab3:
             df = st.session_state['joint_data_df']
             
-            # --- LOWER BODY ANALYTICS ROW ---
-            st.markdown("### 🦵 Lower Body Analytics (Knees)")
+            # Sub-sample timestamps index for plotting
+            chart_df = df.set_index('timestamp')
+            
+            # Row 1: Knees & Elbows
             col1, col2 = st.columns(2)
-            
             with col1:
-                st.write("**Left Knee Angle Statistics**")
-                left_knee_data = df['left_knee_angle'].dropna()
-                if len(left_knee_data) > 0:
-                    st.columns(4)[0].metric("Mean", f"{left_knee_data.mean():.1f}°")
-                    st.columns(4)[1].metric("Min", f"{left_knee_data.min():.1f}°")
-                    st.columns(4)[2].metric("Max", f"{left_knee_data.max():.1f}°")
-                    st.line_chart(df.set_index('timestamp')[['left_knee_angle', 'left_knee_angular_velocity']])
-            
+                st.markdown("#### 🦵 Knee Angles & Velocities")
+                st.line_chart(chart_df[['left_knee_angle', 'right_knee_angle', 'left_knee_angular_velocity', 'right_knee_angular_velocity']])
             with col2:
-                st.write("**Right Knee Angle Statistics**")
-                right_knee_data = df['right_knee_angle'].dropna()
-                if len(right_knee_data) > 0:
-                    st.columns(4)[0].metric("Mean", f"{right_knee_data.mean():.1f}°")
-                    st.columns(4)[1].metric("Min", f"{right_knee_data.min():.1f}°")
-                    st.columns(4)[2].metric("Max", f"{right_knee_data.max():.1f}°")
-                    st.line_chart(df.set_index('timestamp')[['right_knee_angle', 'right_knee_angular_velocity']])
-            
+                st.markdown("#### 💪 Elbow Angles & Velocities")
+                st.line_chart(chart_df[['left_elbow_angle', 'right_elbow_angle', 'left_elbow_angular_velocity', 'right_elbow_angular_velocity']])
+                
             st.divider()
-
-            # --- UPPER BODY ANALYTICS ROW ---
-            st.markdown("###  Upper Body Analytics (Elbows)")
+            
+            # Row 2: Shoulder Angles & Thigh Angles
             col3, col4 = st.columns(2)
-            
             with col3:
-                st.write("**Left Elbow Angle Statistics**")
-                left_elbow_data = df['left_elbow_angle'].dropna()
-                if len(left_elbow_data) > 0:
-                    st.columns(4)[0].metric("Mean", f"{left_elbow_data.mean():.1f}°")
-                    st.columns(4)[1].metric("Min", f"{left_elbow_data.min():.1f}°")
-                    st.columns(4)[2].metric("Max", f"{left_elbow_data.max():.1f}°")
-                    st.line_chart(df.set_index('timestamp')[['left_elbow_angle', 'left_elbow_angular_velocity']])
-            
+                st.markdown("#### 📐 Shoulder Flexion / Extension")
+                st.line_chart(chart_df[['left_shoulder_angle', 'right_shoulder_angle', 'left_shoulder_angular_velocity', 'right_shoulder_angular_velocity']])
             with col4:
-                st.write("**Right Elbow Angle Statistics**")
-                right_elbow_data = df['right_elbow_data' if 'right_elbow_data' in df else 'right_elbow_angle'].dropna()
-                if len(right_elbow_data) > 0:
-                    st.columns(4)[0].metric("Mean", f"{right_elbow_data.mean():.1f}°")
-                    st.columns(4)[1].metric("Min", f"{right_elbow_data.min():.1f}°")
-                    st.columns(4)[2].metric("Max", f"{right_elbow_data.max():.1f}°")
-                    st.line_chart(df.set_index('timestamp')[['right_elbow_angle', 'right_elbow_angular_velocity']])
+                st.markdown("#### 🏃 Thigh Segment Workspace Angles")
+                st.line_chart(chart_df[['left_thigh_angle', 'right_thigh_angle', 'left_thigh_angular_velocity', 'right_thigh_angular_velocity']])
         
         with tab4:
-            st.subheader("Video Information")
+            st.subheader("Processing Profile Summary")
             df = st.session_state['joint_data_df']
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
                 st.metric("Total Frames", len(st.session_state['processed_frames']))
             with col2:
-                st.metric("Data Matrix Rows", len(df))
+                st.metric("Logged Data Points", len(df))
             with col3:
-                unique_people = df['track_id'].nunique()
-                st.metric("Unique People Tracked", unique_people)
+                st.metric("Tracked Subject IDs", df['track_id'].nunique() if len(df) > 0 else 0)
             with col4:
                 if len(df) > 0:
-                    st.metric("Duration (seconds)", f"{df['timestamp'].max():.2f}s")
-
+                    st.metric("Recording Length", f"{df['timestamp'].max():.2f}s")
 else:
     st.info("👆 Please upload a video file to get started!")
-
-# Footer
-st.divider()
-st.markdown("""
-### Core Pipeline:
-1. **Multi-Person Tracking**: Evaluated via ByteTrack frame persistence.
-2. **Signal Resampling**: Spatially smoothed using a Savitzky-Golay numerical filter window to bypass video tracking pixel noise.
-3. **Kinematic Derivatives**: Instantaneous velocities are extracted from the angular frame step delta changes ($\Delta\theta/\Delta t$).
-""")

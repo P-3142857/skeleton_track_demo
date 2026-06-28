@@ -2,6 +2,10 @@
 
 A Python package for detecting human poses in videos and calculating joint angles and angular velocities using YOLOv8.
 
+## Current State of the Project
+
+Have a little bit of hallucinations for darker video such as false positives and warping skeletons and potentially more due to this being tested in a few circumstances which only include video of a swift movement of upper body without significant lower body movements and the camera is set using tripods in all the cases. For 1 minute video using CPU would take around 5 minutes to complete the analysis (tested on AMD Ryzen 7 3750H laptop)
+
 ## Project Structure
 
 ```

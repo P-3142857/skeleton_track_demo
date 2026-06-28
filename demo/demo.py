@@ -158,17 +158,74 @@ if uploaded_file is not None:
         tab1, tab2, tab3, tab4 = st.tabs(["🎥 Processed Video", "📊 Joint Data", "📈 Analytics", "ℹ️ Video Info"])
         
         with tab1:
-            st.subheader("Visual Overlay Playback")
+            st.subheader("Visual Overlay Playback & Kinematic Analysis")
+            
             if 'output_video_path' in st.session_state and st.session_state['output_video_path']:
-                st.video(st.session_state['output_video_path'])
+                # Create a side-by-side layout (65% width for video, 35% for the sticky data card box)
+                video_col, analysis_col = st.columns([65, 35])
                 
-                with open(st.session_state['output_video_path'], 'rb') as f:
-                    st.download_button(
-                        label="📥 Download Processed Video (MP4)",
-                        data=f,
-                        file_name="processed_skeleton_pose.mp4",
-                        mime="video/mp4"
-                    )
+                with video_col:
+                    # 1. Render the Video Player
+                    st.video(st.session_state['output_video_path'])
+                    
+                    # Video download capability
+                    with open(st.session_state['output_video_path'], 'rb') as f:
+                        st.download_button(
+                            label="📥 Download Processed Video (MP4)",
+                            data=f,
+                            file_name="processed_skeleton_pose.mp4",
+                            mime="video/mp4"
+                        )
+                
+                with analysis_col:
+                    # 2. Sticky/Sidebar Movement Analysis Box
+                    st.markdown("### 📊 Live Movement Metrics")
+                    
+                    df_metrics = st.session_state['joint_data_df']
+                    
+                    # Create a scrollable/bounded container box using custom CSS styling
+                    with st.container(border=True):
+                        st.write("✨ **Kinematic Extremes Detected**")
+                        
+                        # Gather maximum extension thresholds
+                        max_l_knee = df_metrics['left_knee_angle'].max()
+                        max_r_knee = df_metrics['right_knee_angle'].max()
+                        max_l_elbow = df_metrics['left_elbow_angle'].max()
+                        max_r_elbow = df_metrics['right_elbow_angle'].max()
+                        
+                        # Gather peak velocities
+                        peak_l_knee_vel = df_metrics['left_knee_angular_velocity'].abs().max()
+                        peak_r_knee_vel = df_metrics['right_knee_angular_velocity'].abs().max()
+                        peak_l_elbow_vel = df_metrics['left_elbow_angular_velocity'].abs().max()
+                        peak_r_elbow_vel = df_metrics['right_elbow_angular_velocity'].abs().max()
+
+                        # Metrics grids
+                        st.markdown("**🦵 Lower Body Limits**")
+                        c1, c2 = st.columns(2)
+                        c1.metric("Max L-Knee", f"{max_l_knee:.1f}°" if not np.isnan(max_l_knee) else "N/A")
+                        c2.metric("Max R-Knee", f"{max_r_knee:.1f}°" if not np.isnan(max_r_knee) else "N/A")
+                        
+                        c1_v, c2_v = st.columns(2)
+                        c1_v.metric("Peak L-Knee Vel", f"{peak_l_knee_vel:.1f}°/s" if not np.isnan(peak_l_knee_vel) else "N/A")
+                        c2_v.metric("Peak R-Knee Vel", f"{peak_r_knee_vel:.1f}°/s" if not np.isnan(peak_r_knee_vel) else "N/A")
+                        
+                        st.markdown("---")
+                        st.markdown("**💪 Upper Body Limits**")
+                        c3, c4 = st.columns(2)
+                        c3.metric("Max L-Elbow", f"{max_l_elbow:.1f}°" if not np.isnan(max_l_elbow) else "N/A")
+                        c4.metric("Max R-Elbow", f"{max_r_elbow:.1f}°" if not np.isnan(max_r_elbow) else "N/A")
+                        
+                        c3_v, c4_v = st.columns(2)
+                        c3_v.metric("Peak L-Elbow Vel", f"{peak_l_elbow_vel:.1f}°/s" if not np.isnan(peak_l_elbow_vel) else "N/A")
+                        c4_v.metric("Peak R-Elbow Vel", f"{peak_r_elbow_vel:.1f}°/s" if not np.isnan(peak_r_elbow_vel) else "N/A")
+
+                    # Add a secondary live feed summary log inside the box
+                    st.markdown("📝 **Summary Log Matrix**")
+                    summary_df = df_metrics[['timestamp', 'track_id', 'left_knee_angle', 'right_knee_angle', 'left_elbow_angle', 'right_elbow_angle']].copy()
+                    # Round for display cleanliness
+                    summary_df = summary_df.round(1)
+                    # Sample every few rows so it doesn't over-clutter the viewer viewport
+                    st.dataframe(summary_df.iloc[::5], use_container_width=True, height=220, hide_index=True)
             else:
                 st.warning("Video playback file could not be generated.")
         
